@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
 using UserManagement.ViewModels;
 using UserManagement.Models;
+using UserManagement.Mail;
 
 namespace UserManagement.Controllers;
 
@@ -9,11 +10,13 @@ public class AccountController : Controller
 {
   private readonly UserManager<AppUser> _userManager;
   private readonly SignInManager<AppUser> _signInManager;
+  private readonly ISendMailService _emailSender;
 
-  public AccountController(UserManager<AppUser> userManager, SignInManager<AppUser> signInManager)
+  public AccountController(UserManager<AppUser> userManager, SignInManager<AppUser> signInManager, ISendMailService emailSender)
   {
     _userManager = userManager;
     _signInManager = signInManager;
+    _emailSender = emailSender;
   }
 
   public IActionResult Index()
@@ -41,16 +44,41 @@ public class AccountController : Controller
   [ValidateAntiForgeryToken]
   public async Task<IActionResult> Login(LoginViewModel loginVM, string? returnUrl = null)
   {
-    if(ModelState.IsValid)
+    if (_signInManager.IsSignedIn(User)) return RedirectToAction("Index", "Home");
+
+    if (ModelState.IsValid)
     {
-      var result = await _signInManager.PasswordSignInAsync(loginVM.Email, loginVM.Password, true, lockoutOnFailure: false);
-      if(result.Succeeded)
+      IdentityUser user = await _userManager.FindByEmailAsync(loginVM.Email);
+
+      if (user == null)
+      {
+        ModelState.AddModelError("", "Tài khoản không tồn tại!");
+        return View(loginVM);
+      }
+
+      var result = await _signInManager.PasswordSignInAsync(loginVM.Email, loginVM.Password, true, lockoutOnFailure: true);
+      if (result.Succeeded)
       {
         return RedirectToAction("Index", "Home");
       }
-      ModelState.AddModelError("", "Email hoặc mật khẩu chưa chính xác, vui lòng thử lại!");
+
+      if (result.IsLockedOut)
+      {
+        return RedirectToAction("Lockout", "Account");
+      }
+      else
+      {
+
+        ModelState.AddModelError("", "Email hoặc mật khẩu chưa chính xác, vui lòng thử lại!");
+      }
+
     }
     return View(loginVM);
+  }
+
+  public async Task<IActionResult> Lockout()
+  {
+    return View();
   }
 
   [HttpPost]
@@ -82,5 +110,75 @@ public class AccountController : Controller
     await _signInManager.SignOutAsync();
 
     return RedirectToAction("Index", "Home");
+  }
+
+  [HttpGet]
+  public async Task<IActionResult> ForgotPassword()
+  {
+    return View();
+  }
+
+  [HttpPost]
+  [ValidateAntiForgeryToken]
+  public async Task<IActionResult> ForgotPassword(ForgotPasswordViewModel forgotPasswordVM)
+  {
+    if (!ModelState.IsValid) return View(forgotPasswordVM);
+    var user = await _userManager.FindByEmailAsync(forgotPasswordVM.Email);
+    if (user == null) return RedirectToAction("Index", "Home");
+
+    var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+    
+    var callbackUrl = Url.Action(action: "ResetPassword", controller: "Account", values: new { token }, protocol: "https");
+
+    await _emailSender.SendEmailAsync(
+        forgotPasswordVM.Email,
+        "Đặt lại mật khẩu",
+        $"Để đặt lại mật khẩu hãy <a href='{callbackUrl}'>bấm vào đây</a>.");
+
+    return RedirectToAction("ForgotPasswordConfirmation", "Account");
+  }
+
+  [HttpGet]
+  public IActionResult ForgotPasswordConfirmation()
+  {
+    return View();
+  }
+
+  [HttpGet]
+  public IActionResult ResetPasswordConfirmation()
+  {
+    return View();
+  }
+
+  [HttpGet]
+  public IActionResult ResetPassword(string token = null)
+  {
+    Console.WriteLine(token);
+    ResetPasswordViewModel resetPasswordVM = new ResetPasswordViewModel();
+    resetPasswordVM.Code = token;
+
+    return View(resetPasswordVM);
+  }
+
+  [HttpPost]
+  public async Task<IActionResult> ResetPassword(ResetPasswordViewModel resetPasswordVM)
+  {
+    if (ModelState.IsValid)
+    {
+      var user = await _userManager.FindByEmailAsync(resetPasswordVM.Email);
+      if (user != null)
+      {
+        var result = await _userManager.ResetPasswordAsync(user, resetPasswordVM.Code, resetPasswordVM.Password);
+        if (result.Succeeded)
+        {
+          return RedirectToAction("ResetPasswordConfirmation", "Account");
+        } else {
+          ModelState.AddModelError(string.Empty, "Đã xảy ra lỗi, không đặt lại được mật khẩu");
+        }
+      } else {
+        ModelState.AddModelError(string.Empty, "Không tìm thấy tài khoản");
+      }
+    }
+    return View(resetPasswordVM);
   }
 }
