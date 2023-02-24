@@ -5,10 +5,12 @@ $ dotnet new mvc -o <project-name>    # Create new project
 $ dotnet dev-certs https --clean      # Force https in develop environment
 $ dotnet dev-certs https --trust
 
-$ dotnet add package <package-name>   # Add package 
+$ dotnet add package <package-name>   # Add package
+$ dotnet restore                      # Restore dependencies
 
 $ dotnet watch run                    # Run watch for develop
 $ dotnet build                        # Build app
+
 ```
 
 ## 2. Install dot-ef cli tool
@@ -37,6 +39,13 @@ $ dotnet ef migrations list                 # Check migration status
 $ dotnet ef database update                 # Run to update database
 $ dotnet ef migrations remove               # Remove last migration
 $ dotnet ef database drop -f -v             # Drop database
+```
+
+## 5. Add package to send email
+
+```
+$ dotnet add package MailKit
+$ dotnet add package MimeKit
 ```
 
 

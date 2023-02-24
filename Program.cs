@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using UserManagement.Data;
 using UserManagement.Models;
+using UserManagement.Mail;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,6 +17,9 @@ builder.Services.AddIdentity<AppUser, IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddDefaultTokenProviders();
 
+builder.Services.Configure<MailSettings>(builder.Configuration.GetSection("EmailConfiguration"));
+builder.Services.AddTransient<ISendMailService, SendMailService>();
+
 builder.Services.Configure<IdentityOptions>(options =>
 {
     // Custom password validation
@@ -24,6 +28,10 @@ builder.Services.Configure<IdentityOptions>(options =>
     options.Password.RequireNonAlphanumeric = false;
     options.Password.RequireUppercase = false;
     options.Password.RequiredLength = 6;
+
+    // Lock account if login fail
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes (2);
+    options.Lockout.MaxFailedAccessAttempts = 3;                       
 });
 
 var app = builder.Build();
